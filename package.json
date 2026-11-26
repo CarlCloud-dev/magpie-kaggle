@@ -1,0 +1,21 @@
+﻿{
+  "name": "magpie-kaggle",
+  "version": "0.1.0",
+  "description": "magpie / OpenCode provider plugin: Kaggle Model Proxy ($10/day, $100/month free AI model credits) as a provider",
+  "type": "module",
+  "main": "./index.mjs",
+  "files": ["index.mjs", "README.md", "LICENSE"],
+  "keywords": ["opencode", "opencode-plugin", "magpie", "kaggle"],
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/CarlCloud-dev/magpie-kaggle.git" },
+  "homepage": "https://github.com/CarlCloud-dev/magpie-kaggle#readme",
+  "magpie": {
+    "name": "Kaggle Models",
+    "icon": "https://cdn.simpleicons.org/kaggle/20BEFF",
+    "maxConcurrency": 2,
+    "summary": {
+      "en": "Your Kaggle account's free AI model credits ($10/day, $100/month) as a provider: Claude, Gemini, GPT, DeepSeek, Qwen and more through Kaggle's Model Proxy, with automatic proxy-token renewal from your Kaggle API token.",
+      "zh": "把 Kaggle 账号的免费 AI 模型额度（每天 $10、每月 $100）变成供应商：通过 Kaggle Model Proxy 使用 Claude、Gemini、GPT、DeepSeek、Qwen 等模型，代理令牌自动续期。"
+    }
+  }
+}
