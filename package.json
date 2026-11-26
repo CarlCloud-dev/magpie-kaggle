@@ -11,7 +11,7 @@
   "homepage": "https://github.com/CarlCloud-dev/magpie-kaggle#readme",
   "magpie": {
     "name": "Kaggle Models",
-    "icon": "https://cdn.simpleicons.org/kaggle/20BEFF",
+    "icon": "https://raw.githubusercontent.com/CarlCloud-dev/magpie-kaggle/main/assets/icon.png",
     "maxConcurrency": 2,
     "summary": {
       "en": "Your Kaggle account's free AI model credits ($10/day, $100/month) as a provider: Claude, Gemini, GPT, DeepSeek, Qwen and more through Kaggle's Model Proxy, with automatic proxy-token renewal from your Kaggle API token.",
