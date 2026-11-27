@@ -1,4 +1,4 @@
-﻿/**
+/**
  * magpie-kaggle — your Kaggle account's free AI model credits as a magpie / OpenCode provider.
  *
  * Kaggle gives every verified account $10/day + $100/month of free model
@@ -100,6 +100,47 @@ async function proxySession(kgat, fetchImpl) {
   return pending
 }
 
+// ---- account key parsing ----------------------------------------------------
+
+/**
+ * The pasted key may carry a display label after whitespace:
+ * "KGAT... work" -> token "KGAT...", label "work". Kaggle has no whoami
+ * endpoint for these tokens, so the label is how accounts tell themselves
+ * apart in magpie's UI (surfaced through the usage hook's user field).
+ */
+function parseKey(key) {
+  const raw = String(key || '').trim()
+  const m = raw.match(/^(\S+)\s+(.+)$/)
+  if (!m) return { token: raw, label: '' }
+  return { token: m[1], label: m[2].trim().slice(0, 40) }
+}
+
+// ---- quota cache (for rest-time hints) --------------------------------------
+
+const quotaCache = new Map() // token -> { at, data }
+
+async function cachedQuota(token, fetchImpl, maxAgeMs = 10 * 60 * 1000) {
+  const c = quotaCache.get(token)
+  if (c && Date.now() - c.at < maxAgeMs) return c.data
+  const data = await fetchQuota(token, fetchImpl)
+  quotaCache.set(token, { at: Date.now(), data })
+  return data
+}
+
+/** "resets in 3h 32m" from the nearest future refill, for magpie's rest parser. */
+function resetHint(quota) {
+  const list = Array.isArray(quota) ? quota : quota?.quotaBalances ?? []
+  let nearest = 0
+  for (const q of list) {
+    const t = new Date(q.refillTime ?? q.refill_time ?? 0).getTime()
+    if (t > Date.now() && (!nearest || t < nearest)) nearest = t
+  }
+  if (!nearest) return ''
+  const mins = Math.max(1, Math.round((nearest - Date.now()) / 60000))
+  const h = Math.floor(mins / 60)
+  return h > 0 ? `resets in ${h}h ${mins % 60}m` : `resets in ${mins}m`
+}
+
 // ---- the intercepted fetch --------------------------------------------------
 
 function requestUrl(input) {
@@ -177,12 +218,29 @@ function makeFetch(kgat, opts) {
         'content-type': 'application/json',
         accept: body.stream ? 'text/event-stream' : 'application/json',
       }
-      return await fetchImpl(upstream, {
+      const resp = await fetchImpl(upstream, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
         signal: init?.signal,
       })
+      if (resp.status === 403 || resp.status === 429) {
+        // Quota refusal: append the reset time in the "resets in Xh Ym" shape
+        // magpie's router parses, so this account is rested exactly until its
+        // window refills instead of the blind backoff ladder.
+        const text = await resp.text()
+        let out = text
+        try {
+          const hint = resetHint(await cachedQuota(kgat, fetchImpl))
+          const j = JSON.parse(text)
+          if (hint && j?.error?.message && !j.error.message.includes('resets in')) {
+            j.error.message = `${j.error.message} — ${hint}`
+            out = JSON.stringify(j)
+          }
+        } catch {}
+        return new Response(out, { status: resp.status, headers: { 'content-type': 'application/json' } })
+      }
+      return resp
     } catch (e) {
       return errorResponse(`Kaggle 代理请求失败：${e?.message ?? e}`, 502)
     }
@@ -244,6 +302,7 @@ export const KagglePlugin = async (_input, options) => {
       methods: [
         {
           type: 'api',
+          instructions: 'Paste your Kaggle API token (KGAT…, created at kaggle.com/settings → API Tokens). Optional: add a space and a name after the token (e.g. "KGAT… work") to label this account in magpie — useful with multiple accounts. 粘贴 KGAT token 后可加空格和备注名，用于多账号区分显示。',
           label: 'Kaggle API Token（kaggle.com/settings/api 创建）',
           labels: {
             zh: 'Kaggle API Token（kaggle.com/settings/api 创建）',
@@ -259,7 +318,7 @@ export const KagglePlugin = async (_input, options) => {
         return {
           baseURL: BASE,
           apiKey: 'kaggle-proxy',
-          fetch: makeFetch(auth.key, { fetchImpl: opts.fetchImpl }),
+          fetch: makeFetch(parseKey(auth.key).token, { fetchImpl: opts.fetchImpl }),
         }
       },
       // magpie's own hook: free-credit windows for the account card / Usage page.
@@ -267,8 +326,9 @@ export const KagglePlugin = async (_input, options) => {
         const auth = await getAuth()
         if (!auth?.key) return { error: '未配置 Kaggle API Token' }
         try {
-          const quota = await fetchQuota(auth.key, opts.fetchImpl || fetch)
-          return usageFromQuota(quota, {})
+          const { token, label } = parseKey(auth.key)
+          const quota = await fetchQuota(token, opts.fetchImpl || fetch)
+          return usageFromQuota(quota, label ? { user: label } : {})
         } catch (e) {
           return { error: `Kaggle 额度查询失败：${e?.message ?? e}` }
         }
@@ -287,4 +347,4 @@ export const KagglePlugin = async (_input, options) => {
   }
 }
 
-export const _internal = { makeFetch, proxySession, usageFromQuota, MODELS, PROVIDER, BASE }
+export const _internal = { makeFetch, proxySession, usageFromQuota, parseKey, resetHint, MODELS, PROVIDER, BASE }

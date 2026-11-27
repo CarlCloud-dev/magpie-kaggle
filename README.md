@@ -26,6 +26,10 @@ magpie plugin login kaggle          # paste your Kaggle API token
 
 **Sign-in token**: a Kaggle API token (`KGAT…`), created at [kaggle.com/settings](https://www.kaggle.com/settings) → API → "Create New Token" (or with `kaggle auth login` of the Kaggle CLI; it is then in `~/.kaggle/access_token`). Your account needs phone/identity verification for the Model Proxy. This is the long-lived token — you paste it once.
 
+**Account label**: paste the token followed by a space and a name (e.g. \KGAT… work\) to show that name on the account in magpie — Kaggle has no whoami endpoint for these tokens, so the label is how multiple accounts tell themselves apart. The same key works without a label; re-login to add one.
+
+**Multiple accounts & routing**: log in once per Kaggle account; magpie keeps each account's proxy token and quota windows separate. Models of this provider can join routing groups alongside other providers, and quota refusals carry the window's reset time so the router rests the account exactly until it refills.
+
 ## How it works
 
 - The proxy itself takes a **short-lived (~2h) bearer token**. The plugin mints it in memory from your long-lived API token through the same endpoint the official `kaggle benchmarks auth` CLI uses, and renews it automatically a couple of minutes before expiry. The proxy token is never stored; no manual re-login.
