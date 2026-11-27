@@ -26,7 +26,7 @@ magpie plugin login kaggle          # paste your Kaggle API token
 
 **Sign-in token**: a Kaggle API token (`KGAT…`), created at [kaggle.com/settings](https://www.kaggle.com/settings) → API → "Create New Token" (or with `kaggle auth login` of the Kaggle CLI; it is then in `~/.kaggle/access_token`). Your account needs phone/identity verification for the Model Proxy. This is the long-lived token — you paste it once.
 
-**Account label**: paste the token followed by a space and a name (e.g. \KGAT… work\) to show that name on the account in magpie — Kaggle has no whoami endpoint for these tokens, so the label is how multiple accounts tell themselves apart. The same key works without a label; re-login to add one.
+**Account label**: the sign-in asks a token and an optional account label in two separate fields (the label names the account in magpie's UI — Kaggle has no whoami endpoint for these tokens). The token is verified against the quota API at sign-in, so a wrong-format key is rejected immediately.
 
 **Multiple accounts & routing**: log in once per Kaggle account; magpie keeps each account's proxy token and quota windows separate. Models of this provider can join routing groups alongside other providers, and quota refusals carry the window's reset time so the router rests the account exactly until it refills.
 

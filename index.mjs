@@ -115,6 +115,15 @@ function parseKey(key) {
   return { token: m[1], label: m[2].trim().slice(0, 40) }
 }
 
+
+/** The account's token and display label from stored auth: the sign-in's
+ *  metadata first, a legacy "token label" paste second. */
+function accountOf(auth) {
+  const { token, label } = parseKey(auth?.key)
+  const md = String(auth?.metadata?.account ?? '').trim()
+  return { token, label: md || label }
+}
+
 // ---- quota cache (for rest-time hints) --------------------------------------
 
 const quotaCache = new Map() // token -> { at, data }
@@ -302,14 +311,52 @@ export const KagglePlugin = async (_input, options) => {
       methods: [
         {
           type: 'api',
-          instructions: 'Paste your Kaggle API token (KGAT…, created at kaggle.com/settings → API Tokens). Optional: add a space and a name after the token (e.g. "KGAT… work") to label this account in magpie — useful with multiple accounts. 粘贴 KGAT token 后可加空格和备注名，用于多账号区分显示。',
-          label: 'Kaggle API Token（kaggle.com/settings/api 创建）',
+          label: 'Kaggle API Token',
           labels: {
-            zh: 'Kaggle API Token（kaggle.com/settings/api 创建）',
-            'zh-TW': 'Kaggle API Token（kaggle.com/settings/api 建立）',
-            en: 'Kaggle API Token (kaggle.com/settings/api)',
+            zh: 'Kaggle API Token',
+            'zh-TW': 'Kaggle API Token',
+            en: 'Kaggle API Token',
           },
-          placeholder: 'KGAT_…',
+          prompts: [
+            {
+              type: 'password',
+              key: 'token',
+              message: 'Kaggle API Token（kaggle.com/settings → API Tokens 创建，KGAT 开头）',
+              messages: {
+                en: 'Kaggle API token (kaggle.com/settings → API Tokens, starts with KGAT)',
+                'zh-TW': 'Kaggle API Token（kaggle.com/settings → API Tokens 建立，KGAT 開頭）',
+              },
+              placeholder: 'KGAT…',
+              validate: (v) => (String(v ?? '').trim().length >= 20 ? null : 'token 太短，请检查是否粘贴完整 / token looks too short'),
+            },
+            {
+              type: 'text',
+              key: 'label',
+              message: '账号备注名（选填，用于多账号区分，直接回车跳过）',
+              messages: {
+                en: 'Account label (optional — press Enter to skip)',
+                'zh-TW': '賬號備註名（選填，直接回車跳過）',
+              },
+              placeholder: '选填 optional',
+              validate: () => null,
+            },
+          ],
+          async authorize(inputs) {
+            const token = String(inputs?.token ?? '').trim()
+            if (!token) return { type: 'failed', error: '需要 Kaggle API token / token required' }
+            // Verify the token against the quota endpoint: a wrong-format key
+            // (legacy kaggle.json) is rejected here instead of 401ing forever.
+            try {
+              await fetchQuota(token, opts.fetchImpl || fetch)
+            } catch (e) {
+              if (e?.status === 401 || e?.status === 403) {
+                return { type: 'failed', error: 'token 被 Kaggle 拒绝（401）——需要 settings → API Tokens 创建的 KGAT 格式 token，legacy kaggle.json 的 key 不可用 / rejected, a KGAT token is required' }
+              }
+              // network or service errors don't block sign-in
+            }
+            const label = String(inputs?.label ?? '').trim().slice(0, 40)
+            return { type: 'success', key: token, ...(label ? { metadata: { account: label } } : {}) }
+          },
         },
       ],
       async loader(getAuth) {
@@ -318,7 +365,7 @@ export const KagglePlugin = async (_input, options) => {
         return {
           baseURL: BASE,
           apiKey: 'kaggle-proxy',
-          fetch: makeFetch(parseKey(auth.key).token, { fetchImpl: opts.fetchImpl }),
+          fetch: makeFetch(accountOf(auth).token, { fetchImpl: opts.fetchImpl }),
         }
       },
       // magpie's own hook: free-credit windows for the account card / Usage page.
@@ -326,7 +373,7 @@ export const KagglePlugin = async (_input, options) => {
         const auth = await getAuth()
         if (!auth?.key) return { error: '未配置 Kaggle API Token' }
         try {
-          const { token, label } = parseKey(auth.key)
+          const { token, label } = accountOf(auth)
           const quota = await fetchQuota(token, opts.fetchImpl || fetch)
           return usageFromQuota(quota, label ? { user: label } : {})
         } catch (e) {
@@ -347,4 +394,4 @@ export const KagglePlugin = async (_input, options) => {
   }
 }
 
-export const _internal = { makeFetch, proxySession, usageFromQuota, parseKey, resetHint, MODELS, PROVIDER, BASE }
+export const _internal = { makeFetch, proxySession, usageFromQuota, parseKey, accountOf, resetHint, MODELS, PROVIDER, BASE }
